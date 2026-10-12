@@ -18,8 +18,9 @@ def _dir(name: str, root: str | Path = DEFAULT_ROOT) -> Path:
     return Path(root) / safe
 
 
-def _rank(e: dict) -> tuple:
-    return e["score"], e["version"]  # ties go to the newer revision
+def _best(index: list[dict]) -> dict:
+    """Highest score; ties go to the newer revision (position, not the version string)."""
+    return max(enumerate(index), key=lambda p: (p[1]["score"], p[0]))[1]
 
 
 def load_index(name: str, root: str | Path = DEFAULT_ROOT) -> list[dict]:
@@ -48,7 +49,7 @@ def record(name: str, svg_path: str | Path, report: Report, note: str = "", root
         (d / "index.json").write_text(json.dumps(index, indent=2))
     entry = dict(entry)
     entry["prev"] = prev
-    entry["best"] = max(index, key=_rank)
+    entry["best"] = _best(index)
     return entry
 
 
@@ -77,7 +78,7 @@ def table(name: str, root: str | Path = DEFAULT_ROOT) -> str:
     index = load_index(name, root)
     if not index:
         return f"no history for {name!r} (run `varness check file.svg --track {name}`)"
-    best = max(index, key=_rank)["version"]
+    best = _best(index)["version"]
     lines = [f"{'ver':<6}{'score':>6}  {'status':<6} {'time':<20} issues"]
     for e in index:
         mark = " *" if e["version"] == best else ""

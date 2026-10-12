@@ -95,9 +95,10 @@ Report the files and show the final sheet.
 |---|---|---|
 | live-text / raster-image / external-ref / script | not a self-contained vector master | outline text, redraw as paths, inline |
 | dangling-ref / no-viewbox / renders-blank | broken file | define ids, add viewBox, check fills/transforms |
+| use-cycle / use-chain | recursive or deeply chained `<use>` (renderers recurse per hop) | reference the base shape directly |
 | thin-at-64 / thin-at-32 | strokes/details below 1px at that size | thicken to the unit value in the fix |
 | gaps-close-at-32 / busy-at-16 | counters and gaps fill in | open gaps, drop detail, make a favicon variant |
-| underfilled / touches-edge / off-center | canvas framing | use the suggested viewBox / translate |
+| underfilled / touches-edge / off-center | canvas framing | use the suggested viewBox / translate (verified to clear the finding; for clipped art it frames the whole drawing) |
 | visual-weight | centre of mass far from centre | optical nudge; judge on the sheet |
 | needs-color / white-knockout | mark only works in colour / fake holes | separate parts with gaps; cut real holes |
 | similar-lightness / low-contrast-* | colours collapse in greyscale or on a background | change lightness, not just hue |

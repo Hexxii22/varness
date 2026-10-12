@@ -70,7 +70,7 @@ def cmd_compare(a) -> int:
     sil = {}
     for r in reports:
         if r.doc is not None and r.analysis is not None and not r.metrics.get("blank"):
-            sil[r.file] = M.silhouette_mask(r.doc)
+            sil[r.file] = M.silhouette_mask(r.analysis.layers["mask"])
     names = list(sil)
     similar = []
     for i, x in enumerate(names):

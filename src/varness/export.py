@@ -13,6 +13,7 @@ from .report import Report
 from .svgdoc import SvgDoc, hex_to_rgb, normalize_color
 
 PNG_SIZES = (16, 32, 48, 64, 128, 256, 512, 1024)
+SAME_RENDER_MAX = 32  # max blurred difference (of 255) for two renders to count as the same drawing
 
 
 def _on_bg(doc: SvgDoc, size: int, bg_rgb, pad: float) -> Image.Image:
@@ -22,16 +23,50 @@ def _on_bg(doc: SvgDoc, size: int, bg_rgb, pad: float) -> Image.Image:
     return img
 
 
-def _mono_check(doc: SvgDoc, mono_svg: str) -> float:
-    """IoU between the mono export's alpha and the original silhouette (should be ~1)."""
-    a = np.asarray(render.render(doc, 256).getchannel("A")) > 127
-    b = np.asarray(render.render(doc, 256, svg=mono_svg).getchannel("A")) > 127
-    union = (a | b).sum()
-    return float((a & b).sum() / union) if union else 1.0
+def verification_pixels(doc: SvgDoc, svg: str | None = None, box: int = 256, supersample: int = 4) -> np.ndarray:
+    """Render at `supersample`× and box-downsample: averages away rasteriser quantisation."""
+    img = render.render(doc, box * supersample, svg=svg)
+    w, h = render.fit(doc, box)
+    return np.asarray(img.resize((w, h), Image.BOX))
+
+
+def _blur3(x: np.ndarray) -> np.ndarray:
+    p = np.pad(x.astype(np.float32), [(1, 1), (1, 1)] + [(0, 0)] * (x.ndim - 2), mode="edge")
+    h, w = x.shape[:2]
+    return sum(p[dy:dy + h, dx:dx + w] for dy in range(3) for dx in range(3)) / 9.0
+
+
+def render_drift(a: np.ndarray, b: np.ndarray) -> int:
+    """Largest per-channel difference between two renders after a 3×3 box blur (255 if sizes differ).
+
+    The blur absorbs rasteriser quantisation (resvg: 16 coverage levels, 4 sub-scanlines) so only
+    real geometry changes count: an edge moved by ~0.3px or more exceeds SAME_RENDER_MAX.
+    """
+    if a.shape != b.shape:
+        return 255
+    return int(np.ceil(np.abs(_blur3(a) - _blur3(b)).max()))
+
+
+def verify_clean(original: SvgDoc, cleaned: SvgDoc) -> int:
+    """Drift between the original and cleaned renders; ≤ SAME_RENDER_MAX means the same drawing."""
+    return render_drift(verification_pixels(original), verification_pixels(cleaned))
+
+
+def verify_mono(doc: SvgDoc, mono_svg: str, color: str) -> tuple[float, float]:
+    """(silhouette IoU with the original, share of solid pixels that are not `color`)."""
+    a, b = verification_pixels(doc).astype(np.int16), verification_pixels(doc, mono_svg).astype(np.int16)
+    sa, sb = a[..., 3] > 127, b[..., 3] > 127
+    union = (sa | sb).sum()
+    iou = float((sa & sb).sum() / union) if union else 1.0
+    solid = b[..., 3] > 242
+    if not solid.any():
+        return iou, 0.0
+    off = np.abs(b[solid][:, :3] - np.asarray(hex_to_rgb(color), dtype=np.int16)).max(axis=1) > 8
+    return iou, float(off.mean())
 
 
 def export(report: Report, out_dir: str | Path, name: str = "logo", bg: str | None = None,
-           app_bg: str | None = None, precision: int = 2) -> dict:
+           app_bg: str | None = None, precision: int | None = None) -> dict:
     doc: SvgDoc = report.doc
     out = Path(out_dir)
     (out / "svg").mkdir(parents=True, exist_ok=True)
@@ -47,17 +82,24 @@ def export(report: Report, out_dir: str | Path, name: str = "logo", bg: str | No
             p.write_bytes(data)
         files.append(rel)
 
+    # the cleaned master must draw exactly what the original draws; otherwise ship the original
     clean = SvgDoc.from_string(doc.clean(precision))
+    drift = verify_clean(doc, clean)
+    if drift > SAME_RENDER_MAX:
+        notes.append(f"cleaning changed the render (max diff {drift}/255); shipping the original markup instead")
+        clean = doc
     write(f"svg/{name}.svg", clean.raw)
     write("favicon.svg", clean.raw)
     for label, color in (("black", "#000000"), ("white", "#ffffff")):
         mono = clean.recolor(color)
         write(f"svg/{name}-{label}.svg", mono)
-        if label == "black":
-            iou = _mono_check(clean, mono)
-            if iou < 0.97:
-                notes.append(f"mono variant differs from the colour silhouette (IoU {iou:.2f}): "
-                             "white fills or knockouts became solid — cut real holes.")
+        iou, stray = verify_mono(clean, mono, color)
+        if iou < 0.97:
+            notes.append(f"{label} variant: silhouette differs from the original (IoU {iou:.2f}) — "
+                         "white fills or knockouts became solid; cut real holes.")
+        if stray > 0.005:
+            notes.append(f"{label} variant: {stray:.1%} of solid pixels are not {color} "
+                         "(filters, images or paint the recolouring cannot reach).")
 
     for s in PNG_SIZES:
         img = render.render(clean, s)

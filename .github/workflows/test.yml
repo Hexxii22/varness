@@ -2,6 +2,8 @@ name: test
 on:
   push:
   pull_request:
+  schedule:
+    - cron: "17 3 * * 1"   # weekly deep run: ~10× more random inputs
 jobs:
   pytest:
     runs-on: ubuntu-latest
@@ -15,5 +17,7 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: pip install -e '.[dev]' uharfbuzz
       - run: varness doctor
-      - run: pytest -q
+      - run: pytest -q                      # Hypothesis profile "ci"
       - run: varness check examples/varness-logo/final.svg --strict
+      - if: github.event_name == 'schedule'
+        run: VARNESS_TEST_PROFILE=deep pytest -q

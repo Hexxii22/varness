@@ -9,7 +9,6 @@ from __future__ import annotations
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
-from functools import lru_cache
 
 from .svgdoc import NUMBER_RE, SVG_NS, SvgDoc, local, parse_style
 
@@ -48,18 +47,19 @@ def resolve_font(family: str, weight: str = "400", style: str = "normal") -> str
     return path
 
 
-@lru_cache(maxsize=16)
-def _load_font(path: str):
-    try:
-        from fontTools.ttLib import TTFont
-    except ImportError as e:
-        raise OutlineError("outlining needs fontTools: pip install 'varness[fonts]'") from e
-    return TTFont(path, fontNumber=0, lazy=True)
+def _load_font(path: str, fonts: dict):
+    """Fonts are cached per outline() call (the dict lives in the call), keyed by path."""
+    if path not in fonts:
+        try:
+            from fontTools.ttLib import TTFont
+        except ImportError as e:
+            raise OutlineError("outlining needs fontTools: pip install 'varness[fonts]'") from e
+        fonts[path] = TTFont(path, fontNumber=0, lazy=True)
+    return fonts[path]
 
 
-def _shape(path: str, text: str) -> list[tuple[str, float, float, float]]:
+def _shape(font, path: str, text: str) -> list[tuple[str, float, float, float]]:
     """(glyph name, x_advance, x_offset, y_offset) in font units; HarfBuzz if available."""
-    font = _load_font(path)
     try:
         import uharfbuzz as hb
 
@@ -114,6 +114,7 @@ def outline(doc: SvgDoc, font_path: str | None = None) -> tuple[str, list[str]]:
     root = doc.clone_root()
     parents = {c: p for p in root.iter() for c in p}
     notes: list[str] = []
+    fonts: dict = {}
     texts = [el for el in root.iter() if local(el.tag) == "text"]
     if not texts:
         return doc.raw, ["no <text> elements found"]
@@ -125,14 +126,15 @@ def outline(doc: SvgDoc, font_path: str | None = None) -> tuple[str, list[str]]:
         weight = _prop(el, "font-weight", parents) or "400"
         fstyle = _prop(el, "font-style", parents) or "normal"
         path = font_path or resolve_font(family, weight, fstyle)
-        font = _load_font(path)
+        font = _load_font(path, fonts)
         size = _num(_prop(el, "font-size", parents), 16.0)
-        spacing = _num(_prop(el, "letter-spacing", parents), 0.0) if (_prop(el, "letter-spacing", parents) or "normal") != "normal" else 0.0
+        ls = _prop(el, "letter-spacing", parents)
+        spacing = 0.0 if ls in (None, "normal") else _num(ls, 0.0)
         anchor = (_prop(el, "text-anchor", parents) or "start").strip()
         x, y = _num(el.get("x")), _num(el.get("y"))
         upem = font["head"].unitsPerEm
         s = size / upem
-        glyphs = _shape(path, content)
+        glyphs = _shape(font, path, content)
         width = sum(a for _, a, _, _ in glyphs) * s + spacing * max(0, len(glyphs) - 1)
         x0 = x - (width / 2 if anchor == "middle" else width if anchor == "end" else 0)
         glyph_set = font.getGlyphSet()

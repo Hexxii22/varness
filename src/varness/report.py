@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 from . import metrics as M
@@ -35,8 +36,44 @@ class Report:
         }
 
 
+class T:
+    """Thresholds shared by findings and scores (one source of truth)."""
+    EDGE = 0.005            # margin below which art counts as touching/clipped
+    MIN_EXTENT = 0.6        # art should span at least this share of the canvas
+    BBOX_OFF = 0.02         # bbox centre offset that triggers off-center
+    CENTROID_OFF = 0.06     # centre-of-mass offset that triggers visual-weight
+    PAD = 0.08              # padding used by suggested viewBoxes
+    THIN64, THIN32, GAP32, BUSY16 = 0.015, 0.08, 0.08, 0.2
+    MONO_LOSS, GRAY_LOSS, WHITE_INK = 0.2, 0.25, 0.03
+    MAX_COLORS = 4
+    INVISIBLE, READABLE, SAME_LIGHTNESS = 1.6, 3.0, 1.15
+    INTRICATE = 8
+
+
 def _pct(x: float) -> str:
     return f"{x * 100:.0f}%"
+
+
+def _num(v: float, size: float) -> str:
+    """Round a user-space number to ~1/1000 of the canvas."""
+    decimals = max(0, math.ceil(3 - math.log10(size)))
+    s = f"{v:.{decimals}f}"
+    return s.rstrip("0").rstrip(".") if "." in s else s
+
+
+def framed_viewbox(x: float, y: float, w: float, h: float, pad: float = T.PAD) -> tuple[float, float, float, float]:
+    """viewBox centred on a bbox with `pad` padding per side (square for near-square art)."""
+    lo, hi = M.SQUARE_ASPECT
+    if lo <= w / max(h, 1e-12) <= hi:
+        vw = vh = max(w, h) * (1 + 2 * pad)
+    else:
+        p = min(w, h) * 2 * pad
+        vw, vh = w + p, h + p
+    return x + w / 2 - vw / 2, y + h / 2 - vh / 2, vw, vh
+
+
+def _vb_text(vb, size: float) -> str:
+    return " ".join(_num(v, size) for v in vb)
 
 
 def metric_findings(doc: SvgDoc, m: dict, lint_codes: set[str]) -> list[Finding]:
@@ -51,6 +88,7 @@ def metric_findings(doc: SvgDoc, m: dict, lint_codes: set[str]) -> list[Finding]
         return out
 
     cw, ch = doc.canvas_size()
+    size = max(cw, ch)
     vb = doc.viewbox or (0.0, 0.0, cw, ch)
     bg_fill = m.get("background_fill")
     if bg_fill:
@@ -59,36 +97,36 @@ def metric_findings(doc: SvgDoc, m: dict, lint_codes: set[str]) -> list[Finding]
             "Keep the master transparent; put backgrounds in variants (app icon, avatar).")
     else:
         mg = m["margins"]
-        if min(mg.values()) < 0.005:
-            sides = [k for k, v in mg.items() if v < 0.005]
-            add("WARN", "touches-edge", "composition", f"Artwork touches the canvas edge ({', '.join(sides)}): it may be clipped.",
-                "Leave ~6–10% padding: enlarge the viewBox or scale the art down.")
+        clipped = min(mg.values()) < T.EDGE
+        if clipped:
+            sides = [k for k, v in mg.items() if v < T.EDGE]
+            true = M.true_bbox_units(doc)
+            fix = (f'Reframe: viewBox="{_vb_text(framed_viewbox(*true), size)}" '
+                   f"fits the whole art with {T.PAD:.0%} padding." if true else
+                   "Leave ~6–10% padding: enlarge the viewBox or scale the art down.")
+            add("WARN", "touches-edge", "composition",
+                f"Artwork touches the canvas edge ({', '.join(sides)}): it may be clipped.", fix)
         ext = max(m["extent"])
         bx0, by0, bx1, by1 = m["bbox"]
-        if ext < 0.6:
-            ux0, uy0 = vb[0] + bx0 * cw, vb[1] + by0 * ch
-            uw, uh = (bx1 - bx0) * cw, (by1 - by0) * ch
-            if 0.75 <= uw / max(uh, 1e-9) <= 1.33:
-                vw = vh = max(uw, uh) * 1.16
-            else:
-                pad = min(uw, uh) * 0.16
-                vw, vh = uw + pad, uh + pad
-            sx, sy = ux0 + uw / 2 - vw / 2, uy0 + uh / 2 - vh / 2
+        if not clipped and ext < T.MIN_EXTENT:
+            box = (vb[0] + bx0 * cw, vb[1] + by0 * ch, (bx1 - bx0) * cw, (by1 - by0) * ch)
             add("WARN", "underfilled", "composition",
                 f"Artwork spans only {_pct(ext)} of the canvas: it will look tiny at small sizes.",
-                f'Tighten the canvas, e.g. viewBox="{sx:.0f} {sy:.0f} {vw:.0f} {vh:.0f}" (8% padding).')
+                f'Tighten the canvas: viewBox="{_vb_text(framed_viewbox(*box), size)}" ({T.PAD:.0%} padding).')
         dx, dy = m["bbox_offset"]
-        if max(abs(dx), abs(dy)) > 0.02:
+        if not clipped and max(abs(dx), abs(dy)) > T.BBOX_OFF:
             add("WARN", "off-center", "composition",
                 f"Artwork bounding box is off-centre by ({dx * 100:+.1f}%, {dy * 100:+.1f}%) of the canvas.",
-                f'Wrap the art in <g transform="translate({-dx * cw:.1f} {-dy * ch:.1f})"> or adjust the viewBox.')
-        if 0.75 <= m["aspect"] <= 1.33:
+                f'Wrap the art in <g transform="translate({_num(-dx * cw, size)} {_num(-dy * ch, size)})"> '
+                "or adjust the viewBox.")
+        lo, hi = M.SQUARE_ASPECT
+        if lo <= m["aspect"] <= hi:
             cx, cy = m["centroid_offset"]
-            if max(abs(cx), abs(cy)) > 0.06:
+            if max(abs(cx), abs(cy)) > T.CENTROID_OFF:
                 where = []
-                if abs(cx) > 0.06:
+                if abs(cx) > T.CENTROID_OFF:
                     where.append("right" if cx > 0 else "left")
-                if abs(cy) > 0.06:
+                if abs(cy) > T.CENTROID_OFF:
                     where.append("low" if cy > 0 else "high")
                 add("INFO", "visual-weight", "composition",
                     f"Visual weight sits {' and '.join(where)} of centre ({cx * 100:+.1f}%, {cy * 100:+.1f}%).",
@@ -97,61 +135,61 @@ def metric_findings(doc: SvgDoc, m: dict, lint_codes: set[str]) -> list[Finding]
     ss = m["small_sizes"]
     s16, s32, s64 = ss["16"], ss["32"], ss["64"]
     at = {"box": "", "height": " tall", "width": " wide"}[m.get("size_basis", "box")]
-    if s64["thin_ink"] > 0.015:
+    if s64["thin_ink"] > T.THIN64:
         add("WARN", "thin-at-64", "scalability", f"{_pct(s64['thin_ink'])} of the ink is hairline (under 1px even at 64px{at}).",
-            f"Nothing should be thinner than ~{2 * s64['px_in_units']:.0f} units.")
-    if s32["thin_ink"] > 0.08:
+            f"Nothing should be thinner than ~{_num(2 * s64['px_in_units'], size)} units.")
+    if s32["thin_ink"] > T.THIN32:
         add("WARN", "thin-at-32", "scalability", f"{_pct(s32['thin_ink'])} of the ink is thinner than 1px at 32px{at} and will vanish or blur.",
-            f"Thicken strokes/details to ≥{s32['px_in_units']:.0f} units (≥{2 * s32['px_in_units']:.0f} is comfortable).")
-    if s32["gap_fill"] > 0.08:
+            f"Thicken strokes/details to ≥{_num(s32['px_in_units'], size)} units (≥{_num(2 * s32['px_in_units'], size)} is comfortable).")
+    if s32["gap_fill"] > T.GAP32:
         add("WARN", "gaps-close-at-32", "scalability",
             f"Gaps/counters narrower than 1px at 32px{at} fill in (area = {_pct(s32['gap_fill'])} of the ink).",
-            f"Open gaps and counters to ≥{s32['px_in_units']:.0f} units, or drop the detail.")
-    if s16["thin_ink"] > 0.2 or s16["gap_fill"] > 0.2:
+            f"Open gaps and counters to ≥{_num(s32['px_in_units'], size)} units, or drop the detail.")
+    if s16["thin_ink"] > T.BUSY16 or s16["gap_fill"] > T.BUSY16:
         add("INFO", "busy-at-16", "scalability",
             f"At 16px{at} {_pct(s16['thin_ink'])} of ink is sub-pixel and gaps worth {_pct(s16['gap_fill'])} fill in.",
             "Consider a simplified small-size variant (just the core shape).")
 
-    if m["mono_loss"] > 0.2:
+    if m["mono_loss"] > T.MONO_LOSS:
         add("WARN", "needs-color", "color",
             f"{_pct(m['mono_loss'])} of visible edges exist only as colour changes: the 1-colour version loses that structure.",
             "Separate parts with real negative space (gaps) instead of colour alone.")
-    if m["gray_loss"] > 0.25:
+    if m["gray_loss"] > T.GRAY_LOSS:
         add("WARN", "similar-lightness", "color",
             f"{_pct(m['gray_loss'])} of colour edges disappear in greyscale: adjacent colours differ in hue only.",
             "Increase the lightness difference between neighbouring colours.")
-    if m["color_count"] > 4 and "many-colors" not in lint_codes:
+    if m["color_count"] > T.MAX_COLORS and "many-colors" not in lint_codes:
         add("WARN", "many-colors", "color", f"{m['color_count']} distinct colours visible.", "Reduce to 1–3 colours.")
     if m["tonal"]:
         add("INFO", "tonal", "color", "Continuous tones (gradients/blends) dominate the render.",
             "Make sure the flat/mono version is the real design.")
-    if not bg_fill and m["white_ink"] > 0.03:
+    if not bg_fill and m["white_ink"] > T.WHITE_INK:
         add("WARN", "white-knockout", "color",
             f"{_pct(m['white_ink'])} of the ink is white: fake knockouts show as white blobs on dark/colour backgrounds.",
             "Cut real holes (fill-rule='evenodd' or subtract the shape) so the background shows through.")
     cw_ = m.get("contrast_on_white")
     if cw_ is not None:
-        if cw_ < 1.6:
-            add("WARN", "low-contrast-white", "color", f"Main colour has only {cw_}:1 contrast on white.",
+        if cw_ < T.INVISIBLE:
+            add("WARN", "low-contrast-white", "color", f"Even the strongest main colour has only {cw_}:1 contrast on white.",
                 "Darken the main colour (≥3:1 on white) or define the logo as light-on-dark.")
-        elif cw_ < 3:
-            add("INFO", "low-contrast-white", "color", f"Main colour has {cw_}:1 contrast on white (3:1 recommended).",
+        elif cw_ < T.READABLE:
+            add("INFO", "low-contrast-white", "color", f"Strongest main colour has {cw_}:1 contrast on white (3:1 recommended).",
                 "Darken slightly for use on light backgrounds.")
-    if m.get("contrast_on_black", 99) < 1.6:
+    if m.get("contrast_on_black", 99) < T.INVISIBLE:
         add("INFO", "reverse-needed", "color", "Mark disappears on dark backgrounds.",
             "Use the white variant on dark backgrounds (`varness export` creates it).")
     cb = m.get("contrast_on_bg")
     if cb:
-        if cb["ratio"] < 1.6:
-            add("WARN", "low-contrast-bg", "color", f"Main colour has {cb['ratio']}:1 contrast on {cb['bg']}.",
+        if cb["ratio"] < T.INVISIBLE:
+            add("WARN", "low-contrast-bg", "color", f"Strongest main colour has {cb['ratio']}:1 contrast on {cb['bg']}.",
                 "Pick colours with ≥3:1 contrast against the brand background.")
-        elif cb["ratio"] < 3:
-            add("INFO", "low-contrast-bg", "color", f"Main colour has {cb['ratio']}:1 contrast on {cb['bg']} (3:1 recommended).")
+        elif cb["ratio"] < T.READABLE:
+            add("INFO", "low-contrast-bg", "color", f"Strongest main colour has {cb['ratio']}:1 contrast on {cb['bg']} (3:1 recommended).")
     pair = m.get("min_color_pair_contrast")
-    if pair and pair["ratio"] < 1.15:
+    if pair and pair["ratio"] < T.SAME_LIGHTNESS:
         add("INFO", "near-duplicate-colors", "color", f"Colours {pair['colors'][0]} and {pair['colors'][1]} are nearly identical in lightness.",
             "Merge them or separate their lightness.")
-    if m["contour_complexity"] > 8:
+    if m["contour_complexity"] > T.INTRICATE:
         add("INFO", "intricate-outline", "simplicity",
             f"Outline is {m['contour_complexity']}× as long as a circle of the same area.",
             "Fewer, bolder shapes read faster and survive small sizes.")
@@ -159,10 +197,11 @@ def metric_findings(doc: SvgDoc, m: dict, lint_codes: set[str]) -> list[Finding]
 
 
 def category_scores(doc: SvgDoc, m: dict, findings: list[Finding]) -> dict:
+    """Smooth 0–100 sub-scores so every real improvement moves the number."""
     pen = {"FAIL": 50, "WARN": 12, "INFO": 2}
     integrity = 100 - sum(pen[f.level] for f in findings if f.category == "integrity" and f.code != "renders-blank")
     if m.get("blank"):
-        return {"integrity": 0, "scalability": 0, "composition": 0, "color": 0, "simplicity": 0}
+        return dict.fromkeys(WEIGHTS, 0)
 
     ss = m["small_sizes"]
     scal = 100 - 300 * (ss["64"]["thin_ink"] + ss["64"]["gap_fill"]) \
@@ -172,25 +211,28 @@ def category_scores(doc: SvgDoc, m: dict, findings: list[Finding]) -> dict:
     if m.get("background_fill"):
         comp -= 10
     else:
-        if min(m["margins"].values()) < 0.005:
+        if min(m["margins"].values()) < T.EDGE:
             comp -= 25
-        comp -= max(0.0, 0.6 - max(m["extent"])) * 100
-        comp -= sum(max(0.0, abs(o) - 0.01) * 400 for o in m["bbox_offset"])
-        if 0.75 <= m["aspect"] <= 1.33:
-            comp -= sum(max(0.0, abs(o) - 0.04) * 300 for o in m["centroid_offset"])
+        comp -= max(0.0, T.MIN_EXTENT - max(m["extent"])) * 100
+        comp -= sum(max(0.0, abs(o) - T.BBOX_OFF / 2) * 400 for o in m["bbox_offset"])
+        lo, hi = M.SQUARE_ASPECT
+        if lo <= m["aspect"] <= hi:
+            comp -= sum(max(0.0, abs(o) - T.CENTROID_OFF * 2 / 3) * 300 for o in m["centroid_offset"])
 
     color = 100 - 60 * m["mono_loss"] - 40 * m["gray_loss"] - 8 * max(0, m["color_count"] - 3) - 5 * m["tonal"]
-    if not m.get("background_fill") and m["white_ink"] > 0.03:
+    if not m.get("background_fill") and m["white_ink"] > T.WHITE_INK:
         color -= 10
-    if m.get("contrast_on_white", 99) < 1.6:
+    if m.get("contrast_on_white", 99) < T.INVISIBLE:
         color -= 25
     color -= 2 * sum(1 for f in findings if f.category == "color" and f.level == "INFO")
 
-    stats = doc.path_stats()
-    drawables = sum(n for t, n in doc.counts().items() if t in ("path", "rect", "circle", "ellipse", "line", "polyline", "polygon", "use"))
-    simp = 100 - max(0, stats["commands"] - 80) * 0.15 - max(0, drawables - 20) * 1.0 - max(0.0, m["contour_complexity"] - 6) * 3
+    inv = doc.inv
+    simp = 100 - max(0, inv.path_commands - 80) * 0.15 - max(0, inv.drawables - 20) * 1.0 \
+        - max(0.0, m["contour_complexity"] - 6) * 3
 
-    clamp = lambda v: int(round(max(0.0, min(100.0, v))))  # noqa: E731
+    def clamp(v: float) -> int:
+        return int(round(max(0.0, min(100.0, v))))
+
     return {"integrity": clamp(integrity), "scalability": clamp(scal), "composition": clamp(comp),
             "color": clamp(color), "simplicity": clamp(simp)}
 

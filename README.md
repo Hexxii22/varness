@@ -27,15 +27,31 @@ brief → 3–5 концептов → varness compare → выбор → [пр�
 
 | категория | проверки |
 |---|---|
-| **integrity** | парсинг, `viewBox`, живой `<text>`, `<image>`, внешние ссылки, скрипты, битые `url(#id)`, фильтры и маски, пустой рендер |
-| **scalability** | доля «чернил» тоньше 1px и просветов уже 1px при 64/32/16px (морфологическое открытие и закрытие). Для широких локапов «32px» значит 32px по высоте |
-| **composition** | поля, касание края, смещение bbox, центр масс, «недозаполненный» холст. Подсказка даёт готовый `viewBox` и `translate` |
+| **integrity** | парсинг, `viewBox`, живой `<text>`, `<image>`, внешние ссылки, скрипты, битые `url(#id)`, циклы и длинные цепочки `<use>`, глубина вложенности, фильтры и маски, пустой рендер |
+| **scalability** | доля «чернил» тоньше 1px и просветов уже 1px при 64/32/16px (морфологическое открытие и закрытие октагоном ≈ кругом диаметром в один целевой пиксель, поэтому диагональные штрихи оцениваются так же, как прямые). Для широких локапов «32px» значит 32px по высоте |
+| **composition** | поля, касание края, смещение bbox, центр масс, «недозаполненный» холст. Подсказка даёт готовый `viewBox` или `translate`; если рисунок обрезан холстом, `viewBox` считается по всему рисунку. Property-тесты проверяют, что применённая подсказка снимает находку |
 | **color** | палитра по пикселям, структура, которая держится только на цвете (моно-версия её теряет), цвета одинаковой светлоты (теряются в сером), белые «фальшивые дырки», контраст на белом, чёрном и брендовом фоне |
 | **simplicity** | число команд пути, число элементов, сложность контура относительно круга |
 
 Каждая находка содержит код, понятное сообщение и конкретную правку в единицах `viewBox`. Итоговый
 `score` от 0 до 100 — это **технический гейт**. Оригинальность и соответствие бренду он не оценивает:
 это задача агента, который смотрит на лист, и пользователя.
+
+## Как проверяется сам varness
+
+Метрики varness — это код, который пишет и правит LLM, поэтому он проверяется так же строго, как ДП-решения
+(подробности и аудит — в [docs/verification.md](docs/verification.md)):
+
+- **эталоны и дифференциальные тесты.** У каждой быстрой функции (морфология O(N) через интегральные
+  изображения, палитра через `bincount`, центр масс, bbox) есть brute-версия «по определению» в
+  `tests/reference.py`, и Hypothesis сверяет их на входах, смещённых к краям: пустые массивы,
+  1 пиксель, окно больше массива, рисунок у самой границы;
+- **метаморфные свойства на рендерах:** инвариантность к масштабу, зеркалу и цвету, пороги «1 целевой
+  пиксель» для штрихов и просветов под любым углом, проверка подсказок;
+- **фазз случайными SVG** (вырожденные холсты, фигуры за пределами холста, нулевые размеры, маски,
+  `currentColor`, крошечные `matrix`): `check` не падает и выдаёт согласованный отчёт; `clean()` и
+  моно-версии рисуют то же самое, что оригинал;
+- **бюджеты по времени и памяти** на худших входах, включая те, что раньше роняли процесс.
 
 ## Установка
 
@@ -65,31 +81,31 @@ varness render logo.svg --size 1024 -o logo.png [--bg "#fff"]
 
 ```
 $ varness check logo.svg --track orbit --note "first draft"
-logo.svg — 75/100  WARN   (renderer: resvg-py, sha 615540796884)
+logo.svg — 73/100  WARN   (renderer: resvg-py, sha 615540796884)
   integrity    ██████████  98
-  scalability  █████░░░░░  50
+  scalability  ████░░░░░░  42
   composition  █████░░░░░  47
   color        █████████░  90
   simplicity   ██████████ 100
 findings:
-  WARN thin-at-64           2% of the ink is hairline (under 1px even at 64px).
+  WARN thin-at-64           10% of the ink is hairline (under 1px even at 64px).
                             → Nothing should be thinner than ~16 units.
   WARN thin-at-32           11% of the ink is thinner than 1px at 32px and will vanish or blur.
                             → Thicken strokes/details to ≥16 units (≥32 is comfortable).
   WARN off-center           Artwork bounding box is off-centre by (-7.0%, -5.1%) of the canvas.
-                            → Wrap the art in <g transform="translate(36.0 26.0)"> or adjust the viewBox.
+                            → Wrap the art in <g transform="translate(36 26)"> or adjust the viewBox.
   WARN white-knockout       19% of the ink is white: fake knockouts show as white blobs on dark/colour backgrounds.
                             → Cut real holes (fill-rule='evenodd' or subtract the shape) so the background shows through.
-  (+3 INFO, use -v to show)
+  (+2 INFO, use -v to show)
 metrics: coverage 23% · extent 68%×68% · bbox offset (-7.0%, -5.1%) · symmetry lr 1.0 tb 0.998
-         thin/gap @64 2%/0% · @32 11%/0% · @16 11%/26% · mono loss 0% · gray loss 0%
+         thin/gap @64 10%/0% · @32 11%/0% · @16 11%/0% · mono loss 0% · gray loss 0%
          palette #2a6f97(80%) #ffffff(19%)
-history: v001 = 75/100
+history: v001 = 73/100
 
 $ varness check logo.svg --track orbit --note "real hole, centred, thicker ring"
 logo.svg — 93/100  PASS  ✓ ship-ready   (renderer: resvg-py, sha 2ccc35b71088)
 ...
-history: v002 = 93/100 · +18 vs v001 · fixed: off-center, thin-at-32, thin-at-64, white-knockout
+history: v002 = 93/100 · +20 vs v001 · fixed: off-center, thin-at-32, thin-at-64, white-knockout
 ```
 
 `export` собирает: очищенный мастер-SVG, чёрную и белую версии SVG, PNG от 16 до 1024px, `favicon.ico`
@@ -125,7 +141,8 @@ history: v002 = 93/100 · +18 vs v001 · fixed: off-center, thin-at-32, thin-at-
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -e '.[dev]' uharfbuzz
-.venv/bin/pytest -q
+.venv/bin/pytest -q                                   # профиль ci: около 2 минут
+VARNESS_TEST_PROFILE=deep .venv/bin/pytest -q         # в ~10 раз больше случайных входов
 ```
 
 ## Roadmap

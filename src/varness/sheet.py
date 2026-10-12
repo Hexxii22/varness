@@ -6,6 +6,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from . import render
+from .metrics import analysis_box
 from .report import WEIGHTS, Report
 from .svgdoc import SvgDoc, hex_to_rgb, normalize_color
 
@@ -15,6 +16,10 @@ MUTED = (120, 120, 120)
 DARK = (18, 18, 18)
 MID = (138, 138, 138)
 STATUS_COLORS = {"PASS": (34, 139, 34), "WARN": (196, 120, 0), "FAIL": (200, 30, 30)}
+
+
+def _views(doc: SvgDoc) -> render.Views:
+    return render.Views(doc, analysis_box(doc))
 
 
 def font(size: int) -> ImageFont.ImageFont:
@@ -106,7 +111,7 @@ def _header(r: Report, width: int) -> Image.Image:
 def _diagnostics(r: Report, width: int) -> Image.Image:
     doc = r.doc
     size = 320
-    base = render.render(doc, size)
+    base = _views(doc).fit(size)
     grid = Image.new("RGB", base.size, (255, 255, 255))
     gd = ImageDraw.Draw(grid)
     w, h = base.size
@@ -182,29 +187,29 @@ def single_sheet(r: Report, bg: str | None = None, width: int = 1280) -> Image.I
     wide = r.metrics.get("size_basis", "box") != "box"
     tall = "tall" if doc.aspect > 1 else "wide"
     for title, back in (("light", (255, 255, 255)), ("dark", DARK)):
-        big = render.render(doc, 384) if wide else render.render_square(doc, 256)
+        big = _views(doc).fit(384) if wide else _views(doc).square(256)
         cells = [(tile(big, (big.width + 24, big.height + 24) if wide else 256, back), "384 wide" if wide else "256")]
         if wide:
             for s in (48, 32, 24, 16):
-                img = render.render_short(doc, s)
+                img = _views(doc).short(s)
                 cells.append((tile(img, (img.width + 12, img.height + 12), back), f"{s}px {tall}"))
-            z = zoom(render.render_short(doc, 16), 6)
+            z = zoom(_views(doc).short(16), 6)
             cells.append((tile(z, (z.width, z.height), back), f"16px {tall} x6"))
         else:
             for s in (128, 64, 32, 16):
-                cells.append((tile(render.render_square(doc, s), max(s, 40) if s < 128 else s, back), f"{s}px"))
-            cells.append((tile(zoom(render.render_square(doc, 32), 4), 128, back), "32px x4"))
-            cells.append((tile(zoom(render.render_square(doc, 16), 8), 128, back), "16px x8"))
+                cells.append((tile(_views(doc).square(s), max(s, 40) if s < 128 else s, back), f"{s}px"))
+            cells.append((tile(zoom(_views(doc).square(32), 4), 128, back), "32px x4"))
+            cells.append((tile(zoom(_views(doc).square(16), 8), 128, back), "16px x8"))
         c.add(_row(title, cells, width))
 
-    base = render.render_square(doc, 128)
+    base = _views(doc).square(128)
     mono = [
         (tile(silhouette(base, (0, 0, 0)), 128, (255, 255, 255)), "1-colour black"),
         (tile(silhouette(base, (255, 255, 255)), 128, (0, 0, 0)), "1-colour reversed"),
         (tile(grayscale(base), 128, (255, 255, 255)), "greyscale"),
         (tile(base, 128, brand or MID), f"on {bg}" if brand else "on mid grey"),
         (tile(silhouette(base, (255, 255, 255)), 128, brand or MID), "white on " + (bg if brand else "grey")),
-        (tile(zoom(silhouette(render.render_square(doc, 16), (0, 0, 0)), 8), 128, (255, 255, 255)), "mono 16px x8"),
+        (tile(zoom(silhouette(_views(doc).square(16), (0, 0, 0)), 8), 128, (255, 255, 255)), "mono 16px x8"),
     ]
     c.add(_row("mono / bg", mono, width))
     c.add(_row("context", _context_cells(doc, brand, wide), width))
@@ -219,7 +224,7 @@ def _context_cells(doc: SvgDoc, brand, wide: bool = False) -> list[tuple[Image.I
         tab = Image.new("RGB", (260, 128), chrome)
         d = ImageDraw.Draw(tab)
         d.rounded_rectangle([10, 46, 220, 82], radius=8, fill=tabc)
-        icon = render.render_square(doc, 16)
+        icon = _views(doc).square(16)
         tab.paste(icon, (22, 56), icon)
         d.text((46, 57), "Brand - Home", font=font(13), fill=txt)
         cells.append((tab, title))
@@ -230,7 +235,7 @@ def _context_cells(doc: SvgDoc, brand, wide: bool = False) -> list[tuple[Image.I
         mask = Image.new("L", (112, 112), 0)
         ImageDraw.Draw(mask).rounded_rectangle([0, 0, 111, 111], radius=26, fill=255)
         sq = Image.new("RGB", (112, 112), back)
-        logo = render.render_square(doc, 72)
+        logo = _views(doc).square(72)
         sq.paste(logo, (20, 20), logo)
         app.paste(sq, (8, 8), mask)
         ImageDraw.Draw(app).rounded_rectangle([8, 8, 119, 119], radius=26, outline=(210, 210, 210))
@@ -238,7 +243,7 @@ def _context_cells(doc: SvgDoc, brand, wide: bool = False) -> list[tuple[Image.I
     line = Image.new("RGB", (260 if wide else 230, 128), (255, 255, 255))
     d = ImageDraw.Draw(line)
     d.text((10, 50), "Powered by", font=font(16), fill=INK)
-    icon = render.render_short(doc, 18) if wide else render.render(doc, 24)
+    icon = _views(doc).short(18) if wide else _views(doc).fit(24)
     line.paste(icon, (102, 50 + (16 - icon.height) // 2 + 2), icon)
     d.text((102 + icon.width + 6, 50), "Brand", font=font(16), fill=INK)
     cells.append((line, "inline 18px tall" if wide else "inline 24px"))
@@ -263,12 +268,12 @@ def compare_sheet(reports: list[Report], similar: list[tuple[str, str, float]] |
         if r.doc is None or r.analysis is None or r.metrics.get("blank"):
             d.text((x, y), "cannot render", font=font(14), fill=STATUS_COLORS["FAIL"])
             continue
-        out.paste(tile(render.render_square(r.doc, col - 20), col, (255, 255, 255)), (x, y))
+        out.paste(tile(_views(r.doc).square(col - 20), col, (255, 255, 255)), (x, y))
         y += col + 10
-        out.paste(tile(render.render_square(r.doc, col - 20), col, DARK), (x, y))
+        out.paste(tile(_views(r.doc).square(col - 20), col, DARK), (x, y))
         y += col + 10
-        s32 = render.render_square(r.doc, 32)
-        s16 = render.render_square(r.doc, 16)
+        s32 = _views(r.doc).square(32)
+        s16 = _views(r.doc).square(16)
         strip = Image.new("RGB", (col, 140), (255, 255, 255))
         strip.paste(s32, (10, 10), s32)
         strip.paste(s16, (52, 18), s16)
@@ -277,7 +282,7 @@ def compare_sheet(reports: list[Report], similar: list[tuple[str, str, float]] |
         out.paste(strip, (x, y))
         _label(d, (x, y + 124), "32 · 16 · 32x4", 11)
         y += 150
-        base = render.render_square(r.doc, 96)
+        base = _views(r.doc).square(96)
         out.paste(tile(silhouette(base, (0, 0, 0)), 104, (255, 255, 255)), (x, y))
         out.paste(tile(silhouette(base, (255, 255, 255)), 104, (0, 0, 0)), (x + 112, y))
         y += 116
