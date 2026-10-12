@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>varness — pen nib</title>
+  <path fill="#14213d" fill-rule="evenodd"
+        d="M256 464L104 168C160 88 352 88 408 168Z
+           M248 112V272H264V112Z
+           M228 300a28 28 0 1 0 56 0a28 28 0 1 0-56 0Z"/>
+</svg>

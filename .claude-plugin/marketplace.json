@@ -1,0 +1,11 @@
+{
+  "name": "varness",
+  "owner": { "name": "hexxii22" },
+  "plugins": [
+    {
+      "name": "varness",
+      "source": "./",
+      "description": "Render-in-the-loop SVG logo design skill (requires `pip install` of the varness CLI)."
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>orbit</title>
+  <path fill="#2a6f97" fill-rule="evenodd" d="M126 256a130 130 0 1 0 260 0a130 130 0 1 0-260 0z M196 256a60 60 0 1 0 120 0a60 60 0 1 0-120 0z"/>
+  <circle cx="256" cy="256" r="196" fill="none" stroke="#2a6f97" stroke-width="28"/>
+</svg>

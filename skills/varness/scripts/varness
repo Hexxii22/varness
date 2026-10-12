@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+# Run varness from this checkout without installing the package.
+# Needs: python3 with numpy, Pillow and resvg-py (pip install numpy pillow resvg-py).
+here="$(cd "$(dirname "$0")" && pwd)"
+root="$(cd "$here/../../.." && pwd)"
+if ! python3 -c "import numpy, PIL" >/dev/null 2>&1; then
+  echo "varness: missing dependencies — pip install numpy pillow resvg-py" >&2
+  exit 1
+fi
+PYTHONPATH="$root/src${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m varness "$@"

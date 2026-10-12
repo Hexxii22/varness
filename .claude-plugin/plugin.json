@@ -1,0 +1,9 @@
+{
+  "name": "varness",
+  "version": "0.1.0",
+  "description": "Render-in-the-loop harness for designing SVG logos: pixel-level quality gates, contact sheets, iteration history and a favicon/app-icon export kit.",
+  "author": { "name": "hexxii22" },
+  "repository": "https://github.com/hexxii22/varness",
+  "license": "MIT",
+  "keywords": ["logo", "svg", "icon", "favicon", "branding", "design"]
+}

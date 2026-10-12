@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>varness — render loop</title>
+  <circle cx="256" cy="256" r="200" fill="none" stroke="#14213d" stroke-width="56"
+          stroke-dasharray="1100 157" transform="rotate(-60 256 256)"/>
+  <path fill="#14213d" d="M191 15L252 50L217 111Z"/>
+  <path fill="#fca311" d="M152 170H206L256 280L306 170H360L284 340H228Z"/>
+</svg>

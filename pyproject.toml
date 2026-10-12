@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "varness"
+version = "0.1.0"
+description = "Render-in-the-loop harness for AI agents designing SVG logos: pixel-level quality gates, contact sheets, iteration history, export kit."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+  "numpy>=1.24",
+  "Pillow>=10.1",
+  "resvg-py>=0.2",
+]
+
+[project.optional-dependencies]
+fonts = ["fonttools>=4.40"]
+cairo = ["cairosvg>=2.7"]
+dev = ["pytest>=7", "fonttools>=4.40"]
+
+[project.scripts]
+varness = "varness.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
