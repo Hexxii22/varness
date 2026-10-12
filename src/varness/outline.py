@@ -58,12 +58,29 @@ def _load_font(path: str, fonts: dict):
     return fonts[path]
 
 
+def _sfnt_bytes(font, path: str) -> bytes:
+    """Raw sfnt data for HarfBuzz, which cannot read WOFF/WOFF2 containers (it would shape every
+    character to .notdef)."""
+    if not getattr(font, "flavor", None):
+        with open(path, "rb") as fh:
+            return fh.read()
+    import io
+
+    from fontTools.ttLib import TTFont
+
+    plain = TTFont(path, fontNumber=0)
+    plain.flavor = None
+    buf = io.BytesIO()
+    plain.save(buf)
+    return buf.getvalue()
+
+
 def _shape(font, path: str, text: str) -> list[tuple[str, float, float, float]]:
     """(glyph name, x_advance, x_offset, y_offset) in font units; HarfBuzz if available."""
     try:
         import uharfbuzz as hb
 
-        blob = hb.Blob.from_file_path(path)
+        blob = hb.Blob(_sfnt_bytes(font, path))
         hbfont = hb.Font(hb.Face(blob))
         buf = hb.Buffer()
         buf.add_str(text)

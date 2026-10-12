@@ -230,3 +230,25 @@ def test_outline_text(write, tmp_path):
     r = check(doc)
     assert "live-text" not in codes(r)
     assert abs(r.metrics["bbox_offset"][0]) < 0.03  # text-anchor=middle honoured
+
+
+@pytest.mark.parametrize("flavor", ["woff2", "woff"])
+def test_outline_reads_web_fonts(write, tmp_path, flavor):
+    """HarfBuzz cannot open WOFF/WOFF2; outline must still find every glyph (regression)."""
+    fontTools = pytest.importorskip("fontTools.ttLib")
+    pytest.importorskip("brotli") if flavor == "woff2" else None
+    src = shutil.which("fc-match") and __import__("subprocess").run(
+        ["fc-match", "-f", "%{file}", "DejaVu Sans"], capture_output=True, text=True).stdout.strip()
+    if not src or not src.endswith(".ttf"):
+        pytest.skip("needs a TrueType system font")
+    web = tmp_path / f"font.{flavor}"
+    f = fontTools.TTFont(src)
+    f.flavor = flavor
+    f.save(str(web))
+    svg_in = write("t.svg", svg('<text x="20" y="300" font-size="200" fill="#123">vax</text>'))
+    from_web, from_ttf = tmp_path / "web.svg", tmp_path / "ttf.svg"
+    assert main(["outline", str(svg_in), "-o", str(from_web), "--font", str(web)]) == 0
+    assert main(["outline", str(svg_in), "-o", str(from_ttf), "--font", src]) == 0
+    # differential: same glyph data in a different container must give the very same outline
+    assert from_web.read_text() == from_ttf.read_text()
+    assert "live-text" not in codes(check(SvgDoc.load(from_web)))
