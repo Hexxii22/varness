@@ -1,0 +1,110 @@
+{
+  "file": "varness-small.svg",
+  "sha": "4722b5b302f7",
+  "renderer": "resvg-py",
+  "score": 94,
+  "status": "PASS",
+  "ship_ready": true,
+  "categories": {
+    "integrity": 100,
+    "scalability": 95,
+    "composition": 78,
+    "color": 98,
+    "simplicity": 100
+  },
+  "findings": [
+    {
+      "level": "INFO",
+      "code": "visual-weight",
+      "category": "composition",
+      "message": "Visual weight sits left of centre (-11.4%, -3.5%).",
+      "fix": "Asymmetric marks often need an optical nudge toward the light side; judge on the sheet."
+    },
+    {
+      "level": "INFO",
+      "code": "reverse-needed",
+      "category": "color",
+      "message": "Mark disappears on dark backgrounds.",
+      "fix": "Use the white variant on dark backgrounds (`varness export` creates it)."
+    }
+  ],
+  "metrics": {
+    "render_px": [
+      512,
+      512
+    ],
+    "canvas_units": [
+      512.0,
+      512.0
+    ],
+    "aspect": 1.0,
+    "size_basis": "box",
+    "coverage": 0.1793,
+    "blank": false,
+    "background_fill": false,
+    "bbox": [
+      0.2051,
+      0.0703,
+      0.8164,
+      0.9121
+    ],
+    "margins": {
+      "left": 0.2051,
+      "top": 0.0703,
+      "right": 0.1836,
+      "bottom": 0.0879
+    },
+    "extent": [
+      0.6113,
+      0.8418
+    ],
+    "bbox_offset": [
+      0.0107,
+      -0.0088
+    ],
+    "centroid": [
+      0.3862,
+      0.4652
+    ],
+    "centroid_offset": [
+      -0.1138,
+      -0.0348
+    ],
+    "symmetry": {
+      "mirror_lr": 0.122,
+      "mirror_tb": 0.457
+    },
+    "contour_complexity": 2.96,
+    "small_sizes": {
+      "16": {
+        "thin_ink": 0.0433,
+        "gap_fill": 0.0191,
+        "px_in_units": 32.0
+      },
+      "32": {
+        "thin_ink": 0.0019,
+        "gap_fill": 0.0045,
+        "px_in_units": 16.0
+      },
+      "64": {
+        "thin_ink": 0.0003,
+        "gap_fill": 0.0011,
+        "px_in_units": 8.0
+      }
+    },
+    "palette": [
+      {
+        "hex": "#14213d",
+        "share": 1.0
+      }
+    ],
+    "color_count": 1,
+    "tonal": false,
+    "contrast_on_white": 15.97,
+    "contrast_on_black": 1.31,
+    "white_ink": 0.0,
+    "mono_loss": 0.0,
+    "mono_loss_knockout": 0.0,
+    "gray_loss": 0.0
+  }
+}

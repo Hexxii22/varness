@@ -18,6 +18,6 @@ jobs:
       - run: pip install -e '.[dev]' uharfbuzz
       - run: varness doctor
       - run: pytest -q                      # Hypothesis profile "ci"
-      - run: varness check examples/varness-logo/final.svg --strict
+      - run: varness check assets/varness.svg assets/varness-small.svg --strict   # the project logo stays ship-ready
       - if: github.event_name == 'schedule'
         run: VARNESS_TEST_PROFILE=deep pytest -q

@@ -1,4 +1,9 @@
-<p align="center"><img src="assets/varness.svg" width="120" alt="varness logo"></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/varness-lockup-dark.svg">
+    <img src="assets/varness-lockup.svg" width="420" alt="varness">
+  </picture>
+</p>
 
 # varness
 
@@ -124,11 +129,25 @@ history: v002 = 93/100 · +20 vs v001 · fixed: off-center, thin-at-32, thin-at-
 
 Главное правило скилла: агент не показывает SVG, который он сам не отрендерил и не посмотрел.
 
-## Пример: логотип самого varness
+## Логотип varness
 
-В [`examples/varness-logo/`](examples/varness-logo) лежат три концепта и финальная версия, сделанные
-по этому процессу. `compare` поймал смещение центра у варианта «перо». Выбран вариант «V + узел»
-(узел — опорная точка векторного пути), после доработки он ship-ready: 99/100.
+Логотип сделан этим же харнессом, по циклу из скилла: три раунда концептов в
+[`logo/concepts/`](logo/concepts), каждый проверен `varness compare` и прочитан глазами. Идея: буква V
+со своим **настоящим бизье-скелетом**. Квадратные узлы и ручки с ползунками взяты прямо из глифа V
+шрифта Kaushan Script (OFL) скриптом [`glyph_skeleton.py`](logo/concepts/round3/glyph_skeleton.py).
+Показаны только ручки, которые выходят за пределы буквы.
+
+| файл | назначение |
+|---|---|
+| [`assets/varness.svg`](assets/varness.svg) / [`-dark`](assets/varness-dark.svg) | основной знак (светлый и тёмный фон) |
+| [`assets/varness-lockup.svg`](assets/varness-lockup.svg) / [`-dark`](assets/varness-lockup-dark.svg) | знак + слово (IBM Plex Mono) |
+| [`assets/varness-icon.svg`](assets/varness-icon.svg) | иконка приложения: кремовая буква на плашке |
+| [`assets/varness-small.svg`](assets/varness-small.svg) / [`-dark`](assets/varness-small-dark.svg) | малые размеры (≤32px): буква без скелета |
+| [`assets/brand/`](assets/brand) | `varness export`: favicon.ico, PNG 16–1024, iOS/PWA-иконки, моно-версии |
+| [`assets/social-preview.png`](assets/social-preview.png) | превью для GitHub/соцсетей (1280×640) |
+
+Первый знак проекта (V с узлом) и его концепты остались примером процесса в
+[`examples/varness-logo/`](examples/varness-logo).
 
 ## Ограничения
 

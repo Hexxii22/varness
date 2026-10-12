@@ -1,0 +1,132 @@
+{
+  "file": "varness-icon.svg",
+  "sha": "9a6492a8b9ca",
+  "renderer": "resvg-py",
+  "score": 95,
+  "status": "WARN",
+  "ship_ready": false,
+  "categories": {
+    "integrity": 98,
+    "scalability": 100,
+    "composition": 100,
+    "color": 68,
+    "simplicity": 100
+  },
+  "findings": [
+    {
+      "level": "WARN",
+      "code": "needs-color",
+      "category": "color",
+      "message": "37% of visible edges exist only as colour changes: the 1-colour version loses that structure.",
+      "fix": "Separate parts with real negative space (gaps) instead of colour alone."
+    },
+    {
+      "level": "WARN",
+      "code": "white-knockout",
+      "category": "color",
+      "message": "11% of the ink is white: fake knockouts show as white blobs on dark/colour backgrounds.",
+      "fix": "Cut real holes (fill-rule='evenodd' or subtract the shape) so the background shows through."
+    },
+    {
+      "level": "INFO",
+      "code": "strokes",
+      "category": "integrity",
+      "message": "Uses strokes: they scale differently in some tools and cannot be boolean-combined.",
+      "fix": "Fine while designing; expand strokes to fills for the production master."
+    }
+  ],
+  "metrics": {
+    "render_px": [
+      512,
+      512
+    ],
+    "canvas_units": [
+      512.0,
+      512.0
+    ],
+    "aspect": 1.0,
+    "size_basis": "box",
+    "coverage": 0.808,
+    "blank": false,
+    "background_fill": false,
+    "bbox": [
+      0.0391,
+      0.041,
+      0.9609,
+      0.9609
+    ],
+    "margins": {
+      "left": 0.0391,
+      "top": 0.041,
+      "right": 0.0391,
+      "bottom": 0.0391
+    },
+    "extent": [
+      0.9219,
+      0.9199
+    ],
+    "bbox_offset": [
+      0.0,
+      0.001
+    ],
+    "centroid": [
+      0.5,
+      0.5
+    ],
+    "centroid_offset": [
+      -0.0,
+      -0.0
+    ],
+    "symmetry": {
+      "mirror_lr": 1.0,
+      "mirror_tb": 0.998
+    },
+    "contour_complexity": 1.15,
+    "small_sizes": {
+      "16": {
+        "thin_ink": 0.0,
+        "gap_fill": 0.0,
+        "px_in_units": 32.0
+      },
+      "32": {
+        "thin_ink": 0.0,
+        "gap_fill": 0.0,
+        "px_in_units": 16.0
+      },
+      "64": {
+        "thin_ink": 0.0,
+        "gap_fill": 0.0,
+        "px_in_units": 8.0
+      }
+    },
+    "palette": [
+      {
+        "hex": "#14213d",
+        "share": 0.803
+      },
+      {
+        "hex": "#f3f1ea",
+        "share": 0.115
+      },
+      {
+        "hex": "#f05a28",
+        "share": 0.067
+      }
+    ],
+    "color_count": 3,
+    "tonal": false,
+    "contrast_on_white": 15.97,
+    "contrast_on_black": 18.58,
+    "min_color_pair_contrast": {
+      "ratio": 3.0,
+      "colors": [
+        "#f3f1ea",
+        "#f05a28"
+      ]
+    },
+    "white_ink": 0.1144,
+    "mono_loss": 0.3695,
+    "mono_loss_knockout": 0.2747,
+    "gray_loss": 0.0
+  }
+}
