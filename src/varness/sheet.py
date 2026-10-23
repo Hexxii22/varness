@@ -108,17 +108,62 @@ def _header(r: Report, width: int) -> Image.Image:
     return img
 
 
-def _diagnostics(r: Report, width: int) -> Image.Image:
+GRIDS = ("8x8", "thirds", "golden", "keyline", "radial:N")
+
+
+def draw_grid(gd: ImageDraw.ImageDraw, w: int, h: int, kind: str = "8x8") -> None:
+    """Composition guides; kind is one of GRIDS (radial:N = N spokes, e.g. radial:12)."""
+    light, strong = (230, 230, 230), (190, 190, 190)
+
+    def lines(fracs, fill):
+        for f in fracs:
+            gd.line([(w * f, 0), (w * f, h)], fill=fill)
+            gd.line([(0, h * f), (w, h * f)], fill=fill)
+
+    def ellipse(fx, fy, fill):  # centred, fx/fy = fraction of the canvas
+        gd.ellipse([w * (1 - fx) / 2, h * (1 - fy) / 2, w * (1 + fx) / 2, h * (1 + fy) / 2], outline=fill)
+
+    def box(fx, fy, fill):
+        gd.rectangle([w * (1 - fx) / 2, h * (1 - fy) / 2, w * (1 + fx) / 2, h * (1 + fy) / 2], outline=fill)
+
+    if kind == "8x8":
+        lines([i / 8 for i in range(1, 8) if i % 4], light)
+        lines([0.5], strong)
+    elif kind == "thirds":
+        lines([1 / 3, 2 / 3], strong)
+    elif kind == "golden":
+        lines([0.382, 0.618], strong)
+        lines([0.236, 0.764], light)
+    elif kind == "keyline":  # Material icon keylines (24-unit grid): circle 20, square 18, portrait/landscape 16x20
+        lines([i / 24 for i in range(1, 24)], (242, 242, 242))
+        ellipse(20 / 24, 20 / 24, strong)
+        box(18 / 24, 18 / 24, strong)
+        box(16 / 24, 20 / 24, light)
+        box(20 / 24, 16 / 24, light)
+        gd.line([(0, 0), (w, h)], fill=light)
+        gd.line([(w, 0), (0, h)], fill=light)
+    elif kind.startswith("radial:"):
+        try:
+            n = int(kind.split(":", 1)[1])
+        except ValueError:
+            raise ValueError(f"bad grid {kind!r}: use radial:N, e.g. radial:12") from None
+        for k in range(n):  # spokes start at 12 o'clock, like build's angles
+            a = 2 * np.pi * k / n
+            gd.line([(w / 2, h / 2), (w / 2 + w * np.sin(a), h / 2 - h * np.cos(a))], fill=strong if k == 0 else light)
+        for f in (0.25, 0.5, 0.75, 1.0):
+            ellipse(f, f, light if f < 1 else strong)
+    else:
+        raise ValueError(f"unknown grid {kind!r}: use one of {', '.join(GRIDS)}")
+
+
+def _diagnostics(r: Report, width: int, grid_kind: str = "8x8") -> Image.Image:
     doc = r.doc
     size = 320
     base = _views(doc).fit(size)
     grid = Image.new("RGB", base.size, (255, 255, 255))
     gd = ImageDraw.Draw(grid)
     w, h = base.size
-    for i in range(1, 8):
-        c = (236, 236, 236) if i % 4 else (205, 205, 205)
-        gd.line([(w * i / 8, 0), (w * i / 8, h)], fill=c)
-        gd.line([(0, h * i / 8), (w, h * i / 8)], fill=c)
+    draw_grid(gd, w, h, grid_kind)
     plain = grid.copy()
     plain.paste(base, (0, 0), base)
 
@@ -154,7 +199,7 @@ def _diagnostics(r: Report, width: int) -> Image.Image:
     row.paste(over, (110 + w + 16, 0))
     d = ImageDraw.Draw(row)
     _label(d, (16, 4), "DIAGNOSTICS", 12, INK)
-    _label(d, (110, h + 4), "on 8x8 grid", 11)
+    _label(d, (110, h + 4), f"on {grid_kind} grid", 11)
     _label(d, (110 + w + 16, h + 4), "overlay", 11)
     lx = 110 + 2 * w + 40
     legend = [((235, 30, 30), "red: ink thinner than 1px at 32px"),
@@ -178,7 +223,7 @@ def _diagnostics(r: Report, width: int) -> Image.Image:
     return row
 
 
-def single_sheet(r: Report, bg: str | None = None, width: int = 1280) -> Image.Image:
+def single_sheet(r: Report, bg: str | None = None, width: int = 1280, grid: str = "8x8") -> Image.Image:
     doc: SvgDoc = r.doc
     brand = hex_to_rgb(normalize_color(bg)) if bg and normalize_color(bg) else None
     c = _Canvas(width)
@@ -213,7 +258,7 @@ def single_sheet(r: Report, bg: str | None = None, width: int = 1280) -> Image.I
     ]
     c.add(_row("mono / bg", mono, width))
     c.add(_row("context", _context_cells(doc, brand, wide), width))
-    c.add(_diagnostics(r, width))
+    c.add(_diagnostics(r, width, grid))
     return c.build()
 
 

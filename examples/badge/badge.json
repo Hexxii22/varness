@@ -1,0 +1,6 @@
+{"title": "Badge", "snap": 8, "layers": [
+ {"fill": "#14213d", "shape": {"subtract": [
+    {"rect": [48, 48, 416, 416], "r": 96},
+    {"ngon": [256, 256, 152, 5], "star": 64, "r": 16},
+    {"circle": [128, 128, 24], "repeat": 4}]}}
+]}

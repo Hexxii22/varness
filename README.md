@@ -63,6 +63,7 @@ brief → 3–5 концептов → varness compare → выбор → [пр�
 ```bash
 pip install "git+https://github.com/hexxii22/varness"            # CLI: numpy, Pillow, resvg-py
 pip install "varness[fonts] @ git+https://github.com/hexxii22/varness" uharfbuzz   # + обводка текста с кернингом
+pip install "varness[build] @ git+https://github.com/hexxii22/varness"   # + varness build (skia-pathops)
 varness doctor
 ```
 
@@ -74,7 +75,8 @@ varness doctor
 ```bash
 varness check logo.svg [-v] [--json] [--sheet sheet.png] [--track brand --note "что поменял"] [--bg "#0b1e3f"] [--strict]
 varness compare concepts/*.svg -o compare.png [--json] [--similar 0.8]
-varness sheet logo.svg -o sheet.png [--bg "#hex"]
+varness sheet logo.svg -o sheet.png [--bg "#hex"] [--grid 8x8|thirds|golden|keyline|radial:N]
+varness build logo.json -o logo.svg
 varness history brand [--restore v003 -o logo.svg]
 varness outline wordmark-src.svg -o wordmark.svg [--font Brand-Bold.otf]
 varness export logo.svg -o dist --name brand [--app-bg "#hex"] [--force]
@@ -116,6 +118,35 @@ history: v002 = 93/100 · +20 vs v001 · fixed: off-center, thin-at-32, thin-at-
 `export` собирает: очищенный мастер-SVG, чёрную и белую версии SVG, PNG от 16 до 1024px, `favicon.ico`
 (16/32/48), `apple-touch-icon.png`, иконки PWA 192/512 и maskable, `site.webmanifest`, `head-snippet.html`,
 `sheet.png` и `report.json`. Если логотип не прошёл проверку (FAIL), экспорт откажется без `--force`.
+
+## Построение фигур: `varness build`
+
+Агент, который считает дуги и «дырки» вручную, ошибается: срезает концы дуг не по радиусу, рисует белое
+поверх цветного вместо настоящего выреза. `build` принимает JSON-описание того, *что* нарисовать,
+и сам считает кривые, булевы операции и скругления (через skia-pathops, точные кривые, не растр):
+
+```json
+{"snap": 8, "layers": [
+  {"fill": "#14213d", "shape": {"subtract": [
+     {"rect": [48, 48, 416, 416], "r": 96},
+     {"ngon": [256, 256, 152, 5], "star": 64, "r": 12}]}},
+  {"fill": "#fca311", "shape": {"circle": [128, 128, 24], "repeat": 4}}
+]}
+```
+
+| ключ | что это |
+|---|---|
+| `circle [cx, cy, r]` · `ring [cx, cy, R, r]` | круг, кольцо |
+| `arc [cx, cy, R, r, a0, a1]` | сектор кольца с радиальными срезами; углы в градусах, 0° = 12 часов, по часовой. `r = 0` даёт сектор круга |
+| `rect [x, y, w, h]` · `polygon [[x, y] или {"polar": [r, угол], "about": [x, y]}, …]` · `ngon [cx, cy, R, n]` (+ `star`: внутренний радиус, `rot`) | многоугольники; `"r"` скругляет все углы настоящей касательной дугой (радиус ужимается, если не помещается) |
+| `union` · `subtract` · `intersect` `[фигуры…]` | булевы операции; `subtract` вырезает из первой фигуры остальные: настоящее негативное пространство |
+| `translate [dx, dy]` · `rotate a` или `[a, x, y]` · `mirror "x"\|"y"` · `repeat n` или `[n, x, y]` | модификаторы у любой фигуры; вращение и повтор по умолчанию вокруг центра холста, `mirror` добавляет отражённую копию |
+| `snap` | шаг сетки: каждая координата и радиус вне шага дают предупреждение (углы не проверяются) |
+| `size` · `title` | холст (512 или `[w, h]`) и `<title>` |
+
+Пример: [`examples/badge/badge.json`](examples/badge/badge.json). Дальше обычный цикл: `varness check logo.svg --sheet …`.
+Композиционные сетки на листе диагностики: `--grid thirds | golden | keyline` (keyline-сетка иконок Material:
+круг, квадрат, вертикальный и горизонтальный прямоугольники) `| radial:12` (лучи от 12 часов, как углы в `build`).
 
 ## Использование с агентом (Claude Code, Codex, Gemini CLI)
 
@@ -159,7 +190,7 @@ history: v002 = 93/100 · +20 vs v001 · fixed: off-center, thin-at-32, thin-at-
 ## Разработка
 
 ```bash
-python -m venv .venv && .venv/bin/pip install -e '.[dev]' uharfbuzz
+python -m venv .venv && .venv/bin/pip install -e '.[dev]' uharfbuzz   # dev включает skia-pathops
 .venv/bin/pytest -q                                   # профиль ci: около 2 минут
 VARNESS_TEST_PROFILE=deep .venv/bin/pytest -q         # в ~10 раз больше случайных входов
 ```
