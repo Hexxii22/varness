@@ -46,6 +46,17 @@ def test_normalize_color():
     assert normalize_color("url(#g)") is None
 
 
+def test_recolor_keeps_invisible_gradient_lines_invisible():
+    # a gradient stroke on a zero-height line renders nothing (objectBoundingBox), so recolor must not reveal it;
+    # userSpaceOnUse gradients and lines with a real box still get the flat colour (found by test_fuzz)
+    grad = '<linearGradient id="g"{units}><stop offset="0" stop-color="#14213d"/></linearGradient>'
+    line = '<line x1="-153.6" y1="0" x2="2" y2="{y2}" stroke="url(#g)" stroke-width="5"/>'
+    for units, y2, want in (("", "0", "none"), (' gradientUnits="userSpaceOnUse"', "0", "#ff0000"),
+                            ("", "40", "#ff0000"), ("", "10%", "#ff0000")):
+        doc = SvgDoc.from_string(svg(f"<defs>{grad.format(units=units)}</defs>" + line.format(y2=y2)))
+        assert f'stroke="{want}"' in doc.recolor("#ff0000"), (units, y2)
+
+
 def test_rejects_non_svg_and_entities():
     with pytest.raises(SvgError):
         SvgDoc.from_string("<html/>")

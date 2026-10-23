@@ -298,8 +298,26 @@ class SvgDoc:
         `currentColor` follows the new colour too.
         """
         root = self.clone_root()
+        servers = {el.get("id"): el for el in root.iter() if el.get("id")}
 
-        def paint(value: str) -> str:
+        def invisible_url(el, tag: str, value: str) -> bool:
+            """A url() paint on a zero-width/height box renders nothing (objectBoundingBox units),
+            so a flat colour there would draw what the original never showed."""
+            m = re.match(r"\s*url\(\s*#([^)\s]+)\s*\)", value)
+            if not m or tag != "line":  # shortcut: only <line> boxes are checked; add a path bbox if fuzz needs it
+                return False
+            server = servers.get(m.group(1))
+            units = server is not None and (server.get("gradientUnits") or server.get("patternUnits"))
+            if units == "userSpaceOnUse":
+                return False
+            x1, y1, x2, y2 = (_length(el.get(k, "0")) for k in ("x1", "y1", "x2", "y2"))
+            if None in (x1, y1, x2, y2):  # percentages etc.: unknown box, keep the paint
+                return False
+            return x1 == x2 or y1 == y2
+
+        def paint(value: str, el=None, tag: str = "") -> str:
+            if el is not None and invisible_url(el, tag, value):
+                return "none"
             return value if value.strip().lower() in SKIP_COLOR_VALUES else color
 
         stack = [root]
@@ -310,12 +328,12 @@ class SvgDoc:
                 continue
             for prop in COLOR_PROPS:
                 if prop in el.attrib:
-                    el.set(prop, paint(el.get(prop)))
+                    el.set(prop, paint(el.get(prop), el, tag))
             if "style" in el.attrib:
                 props = parse_style(el.get("style"))
                 for prop in COLOR_PROPS:
                     if prop in props:
-                        props[prop] = paint(props[prop])
+                        props[prop] = paint(props[prop], el, tag)
                 el.set("style", format_style(props))
             if tag == "style" and el.text:
                 el.text = CSS_COLOR_RE.sub(lambda m: m.group(1) + paint(m.group(2)), el.text)
