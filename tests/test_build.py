@@ -84,6 +84,17 @@ def test_polar_points():
     assert not warnings  # computed x/y are irrational, but r and the centre are on the grid
 
 
+def test_per_corner_radius():
+    # only the [x, y, r] corner is rounded; "r" fills the rest, 0 keeps a corner sharp
+    one = area({"polygon": [[100, 100, 40], [300, 100], [300, 300], [100, 300]]})
+    close(one, 200 * 200 - (4 - math.pi) * 40**2 / 4)
+    close(area({"polygon": [[100, 100, 0], [300, 100, 0], [300, 300], [100, 300]], "r": 40}),
+          200 * 200 - (4 - math.pi) * 40**2 / 2)
+    # a mirrored half whose corners on the axis stay sharp has no notch on the seam
+    half = {"polygon": [[256, 100, 0], [400, 100], [400, 400], [256, 400, 0]], "r": 32, "mirror": "x"}
+    close(area(half), 288 * 300 - (4 - math.pi) * 32**2)
+
+
 def test_snap_warnings():
     _, warnings = build({"snap": 8, "layers": [{"shape": {"circle": [256, 250, 100], "translate": [3, 0]}},
                                                {"shape": {"arc": [256, 256, 200, 160, 13, 77]}}]})
@@ -99,6 +110,7 @@ def test_snap_warnings():
     ({"layers": [{"shape": {"union": [{"blob": 1}]}}]}, "layers[0].union[0]: needs exactly one of"),
     ({"layers": [{"shape": {"polygon": [[0, 0], [1, 1]]}}]}, "at least 3 points"),
     ({"layers": [{"shape": {"polygon": [{"at": [1, 2]}, [0, 0], [1, 1]]}}]}, "layers[0].polygon: bad arguments"),
+    ({"layers": [{"shape": {"polygon": [[0, 0, 1, 2], [9, 0], [9, 9]]}}]}, "[x, y, corner_radius]"),
     ({"layers": [{"shape": {"circle": [9, 9, 9], "mirror": "z"}}]}, "mirror"),
 ])
 def test_spec_errors(spec, msg):

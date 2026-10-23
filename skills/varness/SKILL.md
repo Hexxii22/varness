@@ -90,7 +90,7 @@ Report the files and show the final sheet.
 - Prefer `varness build spec.json -o logo.svg` (needs `pip install 'varness[build]'`) over hand-written paths for
   rings, arcs, cut-outs, rounded corners and radial repeats: it computes exact curves and real boolean holes.
   Shapes: `circle [cx,cy,r]`, `ring [cx,cy,R,r]`, `arc [cx,cy,R,r,a0,a1]` (0° = 12 o'clock, clockwise, radial ends),
-  `rect [x,y,w,h]`, `polygon [[x,y] or {"polar":[r,angle],"about":[x,y]},…]` (polar points: only r snaps), `ngon [cx,cy,R,n]` (+`star`, `rot`); `"r"` rounds polygon corners.
+  `rect [x,y,w,h]`, `polygon [[x,y] or {"polar":[r,angle],"about":[x,y]},…]` (polar points: only r snaps; a point's own corner radius `[x,y,r]` / `"r"` beats the shape's, use 0 for corners on a `mirror` axis), `ngon [cx,cy,R,n]` (+`star`, `rot`); `"r"` rounds polygon corners.
   Ops: `union`/`subtract`/`intersect` lists (`subtract` cuts the rest out of the first). Modifiers on any shape:
   `translate`, `rotate`, `mirror "x"|"y"`, `repeat n`. Set `"snap": 8` to be warned about off-grid values.
   Spec: `{"snap": 8, "layers": [{"fill": "#hex", "shape": {...}}]}`; see `examples/badge/badge.json`.

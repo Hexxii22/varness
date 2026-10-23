@@ -62,12 +62,14 @@ def _arc(cx, cy, R, r, a0, a1):
 
 
 def _polygon(pts, radius=0):
-    """Closed polygon; radius > 0 rounds every corner with a true tangent arc (clamped to fit the edges)."""
+    """Closed polygon; radius (one number or one per corner) rounds corners with a true tangent arc,
+    clamped to fit the edges."""
     n = len(pts)
     if n < 3:
         raise BuildError("polygon needs at least 3 points")
+    radii = list(radius) if isinstance(radius, (list, tuple)) else [radius] * n
     p = pathops.Path()
-    if not radius:
+    if not any(radii):
         p.moveTo(*pts[0])
         for q in pts[1:]:
             p.lineTo(*q)
@@ -83,7 +85,7 @@ def _polygon(pts, radius=0):
             t1 = t2 = (vx, vy)
             r = 0
         else:
-            d = min(radius / math.tan(half), la / 2, lb / 2)
+            d = min(radii[i] / math.tan(half), la / 2, lb / 2)
             r = d * math.tan(half)
             t1 = (vx + ux / la * d, vy + uy / la * d)
             t2 = (vx + wx / lb * d, vy + wy / lb * d)
@@ -169,15 +171,18 @@ class _Builder:
         return path
 
     def _point(self, pt, here):
-        """[x, y], or {"polar": [r, angle], "about": [x, y]} (default: canvas centre); only r and about snap."""
+        """[x, y] / [x, y, corner_r], or {"polar": [r, angle], "about": [x, y], "r": corner_r}
+        (about defaults to the canvas centre; only r and about snap). Returns (x, y, corner_r or None)."""
         if isinstance(pt, dict):
             rad, deg = pt["polar"]
             about = pt.get("about", (self.w / 2, self.h / 2))
             self.check_snap(here, (rad, *about))
-            return _polar(*about, rad, deg)
+            return (*_polar(*about, rad, deg), pt.get("r"))
         self.check_snap(here, pt)
-        x, y = pt
-        return x, y
+        x, y, *own = pt
+        if len(own) > 1:
+            raise BuildError(f"{here}: a point is [x, y] or [x, y, corner_radius], got {pt!r}")
+        return x, y, (own or [None])[0]
 
     def _make(self, kind, arg, n, here):
         r = n.get("r", 0)
@@ -199,7 +204,8 @@ class _Builder:
             return _polygon([(x, y), (x + w, y), (x + w, y + h), (x, y + h)], r)
         if kind == "polygon":
             self.check_snap(here, [r])
-            return _polygon([self._point(pt, here) for pt in arg], r)
+            pts = [self._point(pt, here) for pt in arg]  # a corner's own radius (0 = sharp) beats "r"
+            return _polygon([(x, y) for x, y, _ in pts], [r if own is None else own for _, _, own in pts])
         if kind == "ngon":
             cx, cy, R, k = arg
             self.check_snap(here, (cx, cy, R))
