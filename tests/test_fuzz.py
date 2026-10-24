@@ -47,7 +47,11 @@ def test_check_never_crashes_and_is_consistent(text):
 def test_clean_master_renders_like_the_original(text):
     doc = SvgDoc.from_string(text)
     cleaned = SvgDoc.from_string(doc.clean())
-    a, b = verification_pixels(doc, box=128), verification_pixels(cleaned, box=128)
+    try:
+        a = verification_pixels(doc, box=128)
+    except render.RenderError:  # the renderer itself fails on this input: nothing to compare against
+        return
+    b = verification_pixels(cleaned, box=128)
     assert render_drift(a, b) <= SAME_RENDER_MAX, "clean() changed the drawing"
 
 
@@ -57,7 +61,10 @@ def test_recolor_keeps_silhouette_and_is_one_colour(text):
     doc = SvgDoc.from_string(text)
     if doc.counts().get("filter") or doc.counts().get("image"):
         return
-    base = verification_pixels(doc, box=128)
+    try:
+        base = verification_pixels(doc, box=128)
+    except render.RenderError:  # the renderer itself fails on this input: nothing to compare against
+        return
     mono = verification_pixels(doc, doc.recolor("#ff0000"), box=128)
     assert render_drift(base[..., 3], mono[..., 3]) <= SAME_RENDER_MAX, "recolor changed the alpha"
     solid = mono[..., 3] > 242

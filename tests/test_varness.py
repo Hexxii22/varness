@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from varness import history
+from varness import history, render
 from varness.cli import main
 from varness.lint import lint
 from varness.report import check
@@ -44,6 +44,33 @@ def test_normalize_color():
     assert normalize_color("white") == "#ffffff"
     assert normalize_color("none") is None
     assert normalize_color("url(#g)") is None
+
+
+def test_renderer_panic_becomes_render_error(monkeypatch):
+    # resvg-py turns Rust panics into pyo3 PanicException, a BaseException that `except Exception` misses
+    resvg_py = pytest.importorskip("resvg_py")
+
+    class FakePanic(BaseException):
+        pass
+
+    def boom(**_):
+        raise FakePanic("called `Option::unwrap()` on a `None` value")
+
+    monkeypatch.setattr(resvg_py, "svg_to_bytes", boom)
+    with pytest.raises(render.RenderError, match="FakePanic"):
+        render._render_in_process(GOOD, 64, 64, "resvg-py")
+
+
+def test_recolor_keeps_invisible_gradient_lines_invisible():
+    # a gradient stroke on a zero-height line renders nothing (objectBoundingBox), so recolor must not reveal it;
+    # userSpaceOnUse gradients and lines with a real box still get the flat colour (found by test_fuzz)
+    grad = '<linearGradient id="g"{units}><stop offset="0" stop-color="#14213d"/></linearGradient>'
+    line = '<line x1="-153.6" y1="0" x2="2" y2="{y2}" stroke="url(#g)" stroke-width="5"/>'
+    for units, y2, want in (("", "0", "none"), (' gradientUnits="userSpaceOnUse"', "0", "#ff0000"),
+                            ("", "40", "#ff0000"), ("", "10%", "#ff0000"), ("", "4.951e-104", "none"),
+                            ("", "1e-40", "#ff0000")):  # 4.951e-104 is 0 in float32 (resvg), 1e-40 is not
+        doc = SvgDoc.from_string(svg(f"<defs>{grad.format(units=units)}</defs>" + line.format(y2=y2)))
+        assert f'stroke="{want}"' in doc.recolor("#ff0000"), (units, y2)
 
 
 def test_rejects_non_svg_and_entities():

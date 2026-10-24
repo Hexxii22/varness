@@ -33,7 +33,7 @@ def cmd_check(a) -> int:
         if a.sheet and r.doc is not None and r.analysis is not None:
             from .sheet import single_sheet
 
-            single_sheet(r, bg=a.bg).save(a.sheet)
+            single_sheet(r, bg=a.bg, grid=a.grid).save(a.sheet)
             item["sheet"] = a.sheet
         payload.append(item)
         if not a.json:
@@ -57,7 +57,7 @@ def cmd_sheet(a) -> int:
     if r.doc is None or r.analysis is None:
         print(format_text(r), file=sys.stderr)
         return 1
-    single_sheet(r, bg=a.bg).save(a.out)
+    single_sheet(r, bg=a.bg, grid=a.grid).save(a.out)
     print(f"{a.out}  ({r.file}: {r.score}/100 {r.status})")
     return 0
 
@@ -147,6 +147,21 @@ def cmd_outline(a) -> int:
     return 0
 
 
+def cmd_build(a) -> int:
+    from .build import BuildError, build_file
+
+    try:
+        svg, warnings = build_file(a.spec)
+    except (BuildError, FileNotFoundError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    Path(a.out).write_text(svg, encoding="utf-8")
+    for w in warnings:
+        print(f"warn: {w}")
+    print(f"wrote {a.out}  ← now run `varness check {a.out} --sheet ...`")
+    return 0
+
+
 def cmd_render(a) -> int:
     from PIL import Image
 
@@ -199,12 +214,14 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--bg", help="brand background colour to test contrast against")
     c.add_argument("--strict", action="store_true", help="exit 1 unless every file is ship-ready")
     c.add_argument("-v", "--verbose", action="store_true", help="show INFO findings too")
+    c.add_argument("--grid", default="8x8", help="sheet guides: 8x8 | thirds | golden | keyline | radial:N")
     c.set_defaults(fn=cmd_check)
 
     s = sub.add_parser("sheet", help="contact sheet PNG: sizes, backgrounds, mono, context, diagnostics")
     s.add_argument("file")
     s.add_argument("-o", "--out", default="sheet.png")
     s.add_argument("--bg")
+    s.add_argument("--grid", default="8x8", help="guides: 8x8 | thirds | golden | keyline | radial:N")
     s.set_defaults(fn=cmd_sheet)
 
     cp = sub.add_parser("compare", help="rank candidates side by side and flag near-duplicates")
@@ -235,6 +252,11 @@ def build_parser() -> argparse.ArgumentParser:
     o.add_argument("-o", "--out", required=True)
     o.add_argument("--font", help="font file (.ttf/.otf); default: fc-match on font-family")
     o.set_defaults(fn=cmd_outline)
+
+    b = sub.add_parser("build", help="JSON shape spec → SVG: primitives, boolean cuts, radial repeats, fillets")
+    b.add_argument("spec")
+    b.add_argument("-o", "--out", required=True)
+    b.set_defaults(fn=cmd_build)
 
     r = sub.add_parser("render", help="render one PNG")
     r.add_argument("file")

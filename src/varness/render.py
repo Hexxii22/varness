@@ -194,8 +194,10 @@ def _render_in_process(svg: str, width: int, height: int, backend: str) -> bytes
             return cairosvg.svg2png(bytestring=svg.encode("utf-8"), output_width=width, output_height=height)
     except RecursionError as e:
         raise RenderError(f"{backend}: nesting too deep to render") from e
-    except Exception as e:  # noqa: BLE001 - backends raise arbitrary errors
-        raise RenderError(f"{backend}: {e}") from e
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except BaseException as e:  # noqa: BLE001 - backends raise anything; resvg's Rust panics are BaseException
+        raise RenderError(f"{backend}: {type(e).__name__}: {e}") from e
     raise RenderError(f"{backend} is not an in-process renderer")
 
 
