@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import math
 import re
+import struct
 import xml.etree.ElementTree as ET
 from collections import Counter
 from dataclasses import dataclass, field
@@ -313,7 +314,8 @@ class SvgDoc:
             x1, y1, x2, y2 = (_length(el.get(k, "0")) for k in ("x1", "y1", "x2", "y2"))
             if None in (x1, y1, x2, y2):  # percentages etc.: unknown box, keep the paint
                 return False
-            return x1 == x2 or y1 == y2
+            f32 = lambda v: struct.unpack("f", struct.pack("f", v))[0]  # noqa: E731  resvg compares in float32
+            return f32(x1) == f32(x2) or f32(y1) == f32(y2)
 
         def paint(value: str, el=None, tag: str = "") -> str:
             if el is not None and invisible_url(el, tag, value):
